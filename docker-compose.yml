@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  aem-train-me:
+    image: aem-train-me:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"   # Train-Me frontend UI
+      - "3001:3001"   # Train-Me backend API
+      - "4502:4502"   # AEM Author instance
+    volumes:
+      - aem-repo:/aem/crx-quickstart   # AEM repository data (persists across restarts)
+      - workspace:/workspace            # AEM projects, .env state, SQLite DB, logs
+    environment:
+      # Required: set your OpenAI (or Anthropic) API key
+      - AI_API_KEY=${AI_API_KEY}
+      # Optional overrides (defaults are set in .env.example)
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - AI_MODEL=${AI_MODEL:-gpt-4}
+      - AEM_USERNAME=${AEM_USERNAME:-admin}
+      - AEM_PASSWORD=${AEM_PASSWORD:-admin}
+    # AEM requires significant memory — do not reduce below 6g
+    mem_limit: 8g
+    shm_size: 512m
+    restart: unless-stopped
+
+volumes:
+  aem-repo:
+    driver: local
+  workspace:
+    driver: local

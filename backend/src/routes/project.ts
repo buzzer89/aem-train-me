@@ -133,12 +133,7 @@ router.post("/generate", (req: Request, res: Response) => {
   res.write(`data: ${JSON.stringify({ type: "output", text: `$ mvn ${args.join(" ")}\n` })}\n\n`);
   res.write(`data: ${JSON.stringify({ type: "output", text: `Working directory: ${baseDir}\n\n` })}\n\n`);
 
-  // The AEM archetype's post-generate Groovy script is incompatible with Java 25+.
-  // Force Java 21 via JAVA_HOME so Maven uses a supported runtime.
-  const java21Home = "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home";
-  const spawnEnv = fs.existsSync(java21Home)
-    ? { ...process.env, JAVA_HOME: java21Home }
-    : { ...process.env };
+  const spawnEnv = { ...process.env };
 
   const mvn = spawn(config.build.mavenCmd, args, {
     cwd: baseDir,
