@@ -126,7 +126,7 @@ export function streamChat(
     onToolCall: (name: string, args: Record<string, unknown>) => void;
     onFilesCreated: (files: string[]) => void;
     onSessionId: (id: string) => void;
-    onDone: () => void;
+    onDone: (turnId?: string) => void;
     onError: (error: string) => void;
   }
 ): AbortController {
@@ -170,7 +170,7 @@ export function streamChat(
                 callbacks.onFilesCreated(data.files);
                 break;
               case "done":
-                callbacks.onDone();
+                callbacks.onDone(data.turnId);
                 break;
               case "error":
                 callbacks.onError(data.error);
@@ -189,6 +189,15 @@ export function streamChat(
     });
 
   return controller;
+}
+
+export async function undoFileChanges(turnId: string): Promise<{ restored: string[] }> {
+  const res = await fetch(`${API_BASE}/files/undo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ turnId }),
+  });
+  return res.json();
 }
 
 export function streamBuild(

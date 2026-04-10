@@ -3,6 +3,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { v4 as uuid } from "uuid";
 import { config } from "../config.js";
 import { aemToolDefinitions } from "../tools/aem-tools.js";
 import {
@@ -10,6 +11,7 @@ import {
   readProjectFile,
   listProjectDir,
   flatFileList,
+  startFileTurn,
 } from "./file-manager.js";
 import { checkBundleStatus, checkHttpStatus, tailErrorLog } from "./aem-client.js";
 
@@ -121,19 +123,20 @@ export interface AgentCallbacks {
   onChunk: OnChunk;
   onToolCall?: OnToolCall;
   onFilesCreated?: OnFilesCreated;
-  onComplete: (fullResponse: string, filesCreated: string[]) => void;
+  onComplete: (fullResponse: string, filesCreated: string[], turnId: string) => void;
   onError: (error: string) => void;
 }
 
 async function executeToolCall(
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  turnId: string
 ): Promise<string> {
   switch (name) {
     case "write_file": {
       const filePath = args.path as string;
       const content = args.content as string;
-      writeProjectFile(filePath, content);
+      writeProjectFile(filePath, content, turnId);
       return JSON.stringify({ success: true, path: filePath, message: `File written: ${filePath}` });
     }
     case "read_file": {
@@ -186,6 +189,8 @@ export async function runAgent(
 ): Promise<void> {
   const openai = new OpenAI({ apiKey: config.ai.apiKey });
   const filesCreated: string[] = [];
+  const turnId = uuid();
+  startFileTurn(turnId);
 
   const systemPrompt =
     mode === "trainer"
@@ -294,7 +299,7 @@ export async function runAgent(
           args = {};
         }
 
-        const result = await executeToolCall(tc.name, args);
+        const result = await executeToolCall(tc.name, args, turnId);
 
         if (tc.name === "write_file" && args.path) {
           filesCreated.push(args.path as string);
@@ -311,7 +316,7 @@ export async function runAgent(
     }
 
     callbacks.onFilesCreated?.(filesCreated);
-    callbacks.onComplete(fullResponse, filesCreated);
+    callbacks.onComplete(fullResponse, filesCreated, turnId);
   } catch (err) {
     callbacks.onError((err as Error).message);
   }

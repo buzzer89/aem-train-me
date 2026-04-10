@@ -21,6 +21,7 @@ export interface ChatMessage {
   content: string;
   filesCreated?: string[];
   toolCalls?: ToolCallEvent[];
+  undoTurnId?: string;
   timestamp: number;
 }
 

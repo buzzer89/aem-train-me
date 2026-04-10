@@ -31,6 +31,8 @@ export default function ChatPanel() {
   const setIsStreaming = useStore((s) => s.setIsStreaming);
   const setFileTree = useStore((s) => s.setFileTree);
   const clearMessages = useStore((s) => s.clearMessages);
+  const pendingChatMessage = useStore((s) => s.pendingChatMessage);
+  const setPendingChatMessage = useStore((s) => s.setPendingChatMessage);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -39,6 +41,15 @@ export default function ChatPanel() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Auto-send messages triggered externally (e.g. "Fix with AI" from build failure)
+  useEffect(() => {
+    if (pendingChatMessage && !isStreaming) {
+      setPendingChatMessage(null);
+      sendMessage(pendingChatMessage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingChatMessage]);
 
   const sendMessage = (text: string) => {
     if (!text.trim() || isStreaming) return;
@@ -90,7 +101,17 @@ export default function ChatPanel() {
       onSessionId(id) {
         setSessionId(id);
       },
-      onDone() {
+      onDone(turnId) {
+        if (turnId) {
+          useStore.setState((s) => {
+            const msgs = [...s.messages];
+            const last = msgs[msgs.length - 1];
+            if (last && last.role === "assistant") {
+              msgs[msgs.length - 1] = { ...last, undoTurnId: turnId };
+            }
+            return { messages: msgs };
+          });
+        }
         setIsStreaming(false);
       },
       onError(error) {

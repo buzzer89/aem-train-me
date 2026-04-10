@@ -52,9 +52,9 @@ router.post("/", (req: Request, res: Response) => {
         res.write(`data: ${JSON.stringify({ type: "files_created", files })}\n\n`);
       }
     },
-    onComplete(fullResponse, filesCreated) {
+    onComplete(fullResponse, filesCreated, turnId) {
       addMessage(sid, "assistant", fullResponse, filesCreated);
-      res.write(`data: ${JSON.stringify({ type: "done", filesCreated })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "done", filesCreated, turnId })}\n\n`);
       res.end();
     },
     onError(error) {

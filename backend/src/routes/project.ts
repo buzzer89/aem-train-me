@@ -74,10 +74,12 @@ router.post("/generate", (req: Request, res: Response) => {
     return;
   }
 
-  // Determine where to generate the project
+  // Determine where to generate the project.
+  // AEM_PROJECTS_DIR env var points to the persistent volume in Docker (/workspace/aem-projects).
+  // Falls back to the repo-relative path for local dev outside Docker.
   const baseDir = outputDir
     ? path.resolve(outputDir)
-    : path.resolve(__dirname, "../../../aem-projects");
+    : process.env.AEM_PROJECTS_DIR || path.resolve(__dirname, "../../../aem-projects");
 
   // Ensure base directory exists
   fs.mkdirSync(baseDir, { recursive: true });

@@ -1,13 +1,28 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { ChatMessage } from "@/lib/types";
-import { FileCode, User, Bot } from "lucide-react";
+import { FileCode, User, Bot, Undo2, CheckCircle } from "lucide-react";
+import { undoFileChanges } from "@/lib/api";
 
 export default function ChatMessageComponent({ message }: Readonly<{ message: ChatMessage }>) {
   const isUser = message.role === "user";
+  const [undoState, setUndoState] = useState<"idle" | "loading" | "done">("idle");
+
+  const handleUndo = async () => {
+    if (!message.undoTurnId || undoState !== "idle") return;
+    setUndoState("loading");
+    try {
+      const { restored } = await undoFileChanges(message.undoTurnId);
+      console.info(`Undid ${restored.length} file(s):`, restored);
+      setUndoState("done");
+    } catch {
+      setUndoState("idle");
+    }
+  };
 
   return (
     <div className={`flex gap-3 px-4 py-3 ${isUser ? "bg-transparent" : "bg-white/[0.02]"}`}>
@@ -71,9 +86,27 @@ export default function ChatMessageComponent({ message }: Readonly<{ message: Ch
         {/* Files created badge */}
         {message.filesCreated && message.filesCreated.length > 0 && (
           <div className="mt-3 p-2 bg-deloitte-green/10 border border-deloitte-green/20 rounded-lg">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-deloitte-green mb-1">
-              <FileCode size={14} />
-              {message.filesCreated.length} file(s) created
+            <div className="flex items-center justify-between gap-1.5 mb-1">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-deloitte-green">
+                <FileCode size={14} />
+                {message.filesCreated.length} file(s) created
+              </div>
+              {message.undoTurnId && (
+                <button
+                  onClick={handleUndo}
+                  disabled={undoState !== "idle"}
+                  className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded
+                             bg-white/5 hover:bg-red-500/20 hover:text-red-400
+                             text-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Restore all files to their state before this AI response"
+                >
+                  {undoState === "done" ? (
+                    <><CheckCircle size={11} className="text-deloitte-green" /> Undone</>
+                  ) : (
+                    <><Undo2 size={11} />{undoState === "loading" ? "Undoing..." : "Undo changes"}</>
+                  )}
+                </button>
+              )}
             </div>
             <div className="space-y-0.5">
               {message.filesCreated.map((f) => (

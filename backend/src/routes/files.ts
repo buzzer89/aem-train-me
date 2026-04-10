@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getCategorizedTree, readProjectFile } from "../services/file-manager.js";
+import { getCategorizedTree, readProjectFile, undoTurn } from "../services/file-manager.js";
 
 const router = Router();
 
@@ -40,6 +40,17 @@ router.get("/content", (req: Request, res: Response) => {
   } catch {
     res.status(404).json({ error: "File not found" });
   }
+});
+
+// POST /api/files/undo — restore files to state before a given AI turn
+router.post("/undo", (req: Request, res: Response) => {
+  const { turnId } = req.body as { turnId?: string };
+  if (!turnId) {
+    res.status(400).json({ error: "turnId is required" });
+    return;
+  }
+  const restored = undoTurn(turnId);
+  res.json({ restored });
 });
 
 export default router;

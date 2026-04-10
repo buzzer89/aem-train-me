@@ -1,10 +1,12 @@
 "use client";
 
+import { useRef, useState } from "react";
 import {
   Hammer,
   Rocket,
   FileText,
   Settings,
+  Wrench,
 } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { streamBuild, fetchLogs } from "@/lib/api";
@@ -17,11 +19,17 @@ export default function CommandCenter() {
   const setIsBuildRunning = useStore((s) => s.setIsBuildRunning);
   const showConfig = useStore((s) => s.showConfig);
   const setShowConfig = useStore((s) => s.setShowConfig);
+  const setPendingChatMessage = useStore((s) => s.setPendingChatMessage);
+
+  const [buildFailed, setBuildFailed] = useState(false);
+  const errorBufferRef = useRef<string>("");
 
   const runBuild = (type: "build-only" | "build-deploy") => {
     if (isBuildRunning) return;
     clearConsole();
     setIsBuildRunning(true);
+    setBuildFailed(false);
+    errorBufferRef.current = "";
 
     const label = type === "build-deploy" ? "Build & Deploy" : "Build Only";
     addConsoleLine({ text: `[INFO] Starting ${label}...\n`, type: "info", timestamp: Date.now() });
@@ -30,7 +38,10 @@ export default function CommandCenter() {
       onOutput(text) {
         // Color-code Maven output
         let lineType: "info" | "error" | "success" = "info";
-        if (text.includes("ERROR") || text.includes("FAILURE")) lineType = "error";
+        if (text.includes("ERROR") || text.includes("FAILURE")) {
+          lineType = "error";
+          errorBufferRef.current += text;
+        }
         if (text.includes("BUILD SUCCESS")) lineType = "success";
         addConsoleLine({ text, type: lineType, timestamp: Date.now() });
       },
@@ -44,6 +55,7 @@ export default function CommandCenter() {
           timestamp: Date.now(),
         });
         setIsBuildRunning(false);
+        if (!success) setBuildFailed(true);
       },
       onValidation(check, passed, detail) {
         addConsoleLine({
@@ -133,6 +145,24 @@ export default function CommandCenter() {
         <div className="mx-3 mb-2 px-3 py-1.5 bg-amber-600/20 border border-amber-600/30 rounded text-xs text-amber-400 animate-pulse">
           Build in progress...
         </div>
+      )}
+
+      {/* Fix with AI — shown after a build failure */}
+      {buildFailed && !isBuildRunning && (
+        <button
+          onClick={() => {
+            const errors = errorBufferRef.current.slice(-3000);
+            setPendingChatMessage(
+              `The Maven build failed. Please analyze the errors below, identify which files you generated that are causing the problem, and fix them.\n\n\`\`\`\n${errors}\n\`\`\``
+            );
+            setBuildFailed(false);
+          }}
+          className="mx-3 mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg
+                     text-xs font-semibold bg-red-600/80 hover:bg-red-500 transition-colors"
+        >
+          <Wrench size={13} />
+          Fix with AI
+        </button>
       )}
 
       {/* Console Output */}

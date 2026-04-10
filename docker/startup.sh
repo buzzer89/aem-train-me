@@ -27,6 +27,8 @@ set +o allexport
 export ENV_FILE=/workspace/.env
 export DB_PATH=${DB_PATH:-/workspace/data.db}
 export PROMPT_PATH=${PROMPT_PATH:-/app/prompts/aem-architect.md}
+# Base directory where new AEM Maven projects are generated — must be on the volume
+export AEM_PROJECTS_DIR=/workspace/aem-projects
 # AEM_PROJECT_PATH intentionally NOT set here — it comes from /workspace/.env
 # (written by persistEnv() when a project is generated via the Setup Wizard)
 

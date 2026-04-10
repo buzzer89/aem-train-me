@@ -29,10 +29,57 @@ function ensureWithinProject(filePath: string): string {
   return resolved;
 }
 
-export function writeProjectFile(relativePath: string, content: string): void {
+// ── Turn snapshot store ────────────────────────────────────────────────────
+// Keeps pre-write file snapshots per AI turn so changes can be undone.
+// Stored in memory only — cleared when the backend restarts.
+const turnSnapshots = new Map<string, { path: string; previousContent: string | null }[]>();
+
+export function startFileTurn(turnId: string): void {
+  turnSnapshots.set(turnId, []);
+}
+
+export function writeProjectFile(relativePath: string, content: string, turnId?: string): void {
   const abs = ensureWithinProject(relativePath);
+
+  if (turnId) {
+    const snapshots = turnSnapshots.get(turnId);
+    if (snapshots && !snapshots.find((s) => s.path === relativePath)) {
+      // Capture previous content before overwriting (null = file didn't exist)
+      const previousContent = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
+      snapshots.push({ path: relativePath, previousContent });
+    }
+  }
+
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content, "utf-8");
+}
+
+export function undoTurn(turnId: string): string[] {
+  const snapshots = turnSnapshots.get(turnId);
+  if (!snapshots || snapshots.length === 0) return [];
+
+  const restored: string[] = [];
+  for (const { path: relPath, previousContent } of snapshots) {
+    try {
+      const abs = ensureWithinProject(relPath);
+      if (previousContent === null) {
+        // File was newly created — delete it
+        if (fs.existsSync(abs)) {
+          fs.unlinkSync(abs);
+          restored.push(relPath);
+        }
+      } else {
+        // File existed before — restore old content
+        fs.writeFileSync(abs, previousContent, "utf-8");
+        restored.push(relPath);
+      }
+    } catch {
+      // skip files that can't be restored
+    }
+  }
+
+  turnSnapshots.delete(turnId);
+  return restored;
 }
 
 export function readProjectFile(relativePath: string): string {
