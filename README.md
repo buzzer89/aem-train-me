@@ -156,3 +156,7 @@ AEM repository data and generated projects are stored in Docker named volumes an
 ## Troubleshooting
 
 See [SETUP.md — Troubleshooting](SETUP.md#troubleshooting) for solutions to common issues including Java path errors, Maven version errors, and AEM Core Components not rendering.
+
+## Screenshot
+
+![alt text](image.png)
