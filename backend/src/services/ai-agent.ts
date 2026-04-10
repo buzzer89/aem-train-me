@@ -16,7 +16,7 @@ import { checkBundleStatus, checkHttpStatus, tailErrorLog } from "./aem-client.j
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function loadSystemPrompt(): string {
-  const promptPath = path.resolve(__dirname, "../../../prompts/aem-architect.md");
+  const promptPath = process.env.PROMPT_PATH || path.resolve(__dirname, "../../../prompts/aem-architect.md");
   if (fs.existsSync(promptPath)) {
     return fs.readFileSync(promptPath, "utf-8");
   }

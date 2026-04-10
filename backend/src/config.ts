@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+dotenv.config({ path: process.env.ENV_FILE || path.resolve(__dirname, "../../.env") });
 
 function env(key: string, fallback?: string): string {
   const val = process.env[key] ?? fallback;
@@ -16,7 +16,7 @@ export const config = {
   port: Number.parseInt(env("PORT", "3001"), 10),
 
   aemProject: {
-    path: env("AEM_PROJECT_PATH", ""),
+    path: env("AEM_PROJECT_PATH", "/workspace/aem-projects/basetraining"),
     groupId: env("AEM_GROUP_ID", "com.mysite"),
     artifactId: env("AEM_ARTIFACT_ID", "mysite"),
     appsFolder: env("AEM_APPS_FOLDER", "mysite"),
@@ -65,7 +65,7 @@ export function setProjectConfig(opts: {
 
 /** Persist the current project settings back to the .env file */
 export function persistEnv(): void {
-  const envPath = path.resolve(__dirname, "../../.env");
+  const envPath = process.env.ENV_FILE || path.resolve(__dirname, "../../.env");
   const lines: string[] = fs.existsSync(envPath)
     ? fs.readFileSync(envPath, "utf-8").split("\n")
     : [];

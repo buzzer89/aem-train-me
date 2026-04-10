@@ -16,6 +16,11 @@ config/repo-index.json
 */backend/logs
 */config/repo-index.json
 aem-projects
+
+# AEM binary files — never commit (place in aem/ before docker build)
+aem/*.jar
+aem/license.properties
+
 package-lock.json
 */package-lock.json
 yarn.lock

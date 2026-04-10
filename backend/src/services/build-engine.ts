@@ -34,14 +34,10 @@ class BuildEngine extends EventEmitter {
 
       this.emit("start", { deploy, modules });
 
-      // Force Java 21 — the Groovy scripts in AEM archetypes are incompatible with Java 25+
-      const java21Home = "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home";
-
       this.currentProcess = spawn(config.build.mavenCmd, args, {
         cwd: config.aemProject.path,
         env: {
           ...process.env,
-          JAVA_HOME: java21Home,
         },
         shell: true,
       });
