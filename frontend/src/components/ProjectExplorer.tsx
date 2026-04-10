@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -8,6 +8,7 @@ import {
   Folder,
   Pin,
   RefreshCw,
+  ChevronsDownUp,
 } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { fetchFileTree } from "@/lib/api";
@@ -72,11 +73,20 @@ function TreeNode({ node, depth = 0 }: Readonly<{ node: FileNode; depth?: number
 function CategorySection({
   label,
   nodes,
+  collapseSignal,
 }: Readonly<{
   label: string;
   nodes: FileNode[];
+  collapseSignal: number;
 }>) {
   const [expanded, setExpanded] = useState(true);
+  const prevSignal = useRef(collapseSignal);
+  useEffect(() => {
+    if (collapseSignal !== prevSignal.current) {
+      prevSignal.current = collapseSignal;
+      setExpanded(false);
+    }
+  }, [collapseSignal]);
   const count = countFiles(nodes);
 
   return (
@@ -116,6 +126,7 @@ export default function ProjectExplorer() {
   const fileTree = useStore((s) => s.fileTree);
   const setFileTree = useStore((s) => s.setFileTree);
   const [loading, setLoading] = useState(false);
+  const [collapseSignal, setCollapseSignal] = useState(0);
 
   const refresh = async () => {
     setLoading(true);
@@ -148,6 +159,13 @@ export default function ProjectExplorer() {
           <button onClick={refresh} className="p-1 hover:bg-white/10 rounded" title="Refresh">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </button>
+          <button
+            onClick={() => setCollapseSignal((n) => n + 1)}
+            className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+            title="Collapse all"
+          >
+            <ChevronsDownUp size={14} />
+          </button>
           <Pin size={14} className="text-gray-500" />
         </div>
       </div>
@@ -168,6 +186,7 @@ export default function ProjectExplorer() {
                 key={key}
                 label={categoryLabels[key]}
                 nodes={nodes}
+                collapseSignal={collapseSignal}
               />
             );
           })

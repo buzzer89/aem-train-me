@@ -13,18 +13,22 @@ if [ ! -f /workspace/.env ]; then
   cp /app/.env.example /workspace/.env
 fi
 
-# Paths exported so all child processes inherit them
-export ENV_FILE=/workspace/.env
-export DB_PATH=/workspace/data.db
-export PROMPT_PATH=/app/prompts/aem-architect.md
-export AEM_PROJECT_PATH=/workspace/aem-projects/basetraining
+# Ensure workspace directories exist (volume mount overrides image layers)
+mkdir -p /workspace/aem-projects
 
-# Load AI_API_KEY and other vars from the workspace .env into this shell
-# (only sets vars that aren't already set via `docker run -e`)
+# Load persisted config from /workspace/.env FIRST so values saved by the
+# Setup Wizard (e.g. AEM_PROJECT_PATH) are restored on restart.
 set -o allexport
 # shellcheck source=/dev/null
 source /workspace/.env 2>/dev/null || true
 set +o allexport
+
+# Set fixed paths — use := so we never override values already loaded from .env
+export ENV_FILE=/workspace/.env
+export DB_PATH=${DB_PATH:-/workspace/data.db}
+export PROMPT_PATH=${PROMPT_PATH:-/app/prompts/aem-architect.md}
+# AEM_PROJECT_PATH intentionally NOT set here — it comes from /workspace/.env
+# (written by persistEnv() when a project is generated via the Setup Wizard)
 
 # ── Start AEM Author ───────────────────────────────────────────────────────
 echo ""
