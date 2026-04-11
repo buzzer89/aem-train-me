@@ -16,11 +16,12 @@ fi
 # Ensure workspace directories exist (volume mount overrides image layers)
 mkdir -p /workspace/aem-projects
 
-# If AI_API_KEY was injected via Docker environment (not in /workspace/.env),
-# persist it into /workspace/.env so it survives the source below.
-if [ -n "$AI_API_KEY" ]; then
-  sed -i "s|^AI_API_KEY=.*|AI_API_KEY=${AI_API_KEY}|" /workspace/.env
-fi
+# Sync all AI_* vars from Docker environment into /workspace/.env so that
+# values set in the project .env (via env_file / environment in docker-compose)
+# are not silently overwritten when /workspace/.env is sourced below.
+[ -n "$AI_API_KEY" ]  && sed -i "s|^AI_API_KEY=.*|AI_API_KEY=${AI_API_KEY}|"   /workspace/.env
+[ -n "$AI_MODEL" ]    && sed -i "s|^AI_MODEL=.*|AI_MODEL=${AI_MODEL}|"           /workspace/.env
+[ -n "$AI_PROVIDER" ] && sed -i "s|^AI_PROVIDER=.*|AI_PROVIDER=${AI_PROVIDER}|" /workspace/.env
 
 # Load persisted config from /workspace/.env FIRST so values saved by the
 # Setup Wizard (e.g. AEM_PROJECT_PATH) are restored on restart.
