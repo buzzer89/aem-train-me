@@ -70,6 +70,66 @@ export async function queryJcr(jcrPath: string): Promise<unknown> {
   }
 }
 
+export interface CreatePageResult {
+  success: boolean;
+  path?: string;
+  error?: string;
+}
+
+/**
+ * Create an AEM page (or update its jcr:content properties) using the Sling POST servlet.
+ * parentPath + pageName must both be supplied; all other properties are written to jcr:content.
+ */
+export async function createAemPage(opts: {
+  parentPath: string;
+  pageName: string;
+  title: string;
+  template: string;
+  extraProperties?: Record<string, string>;
+}): Promise<CreatePageResult> {
+  const { parentPath, pageName, title, template, extraProperties = {} } = opts;
+
+  // Step 1: create the cq:Page node
+  const pageBody = new URLSearchParams({
+    "jcr:primaryType": "cq:Page",
+    ":name": pageName,
+  });
+  const pageRes = await aemFetch(`${parentPath}/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: pageBody.toString(),
+  });
+
+  if (!pageRes.ok && pageRes.status !== 200 && pageRes.status !== 201) {
+    // 200 means it already exists — that's fine
+    const text = await pageRes.text();
+    if (!text.includes("already exists") && pageRes.status !== 200) {
+      return { success: false, error: `Failed to create page node (${pageRes.status}): ${text.slice(0, 200)}` };
+    }
+  }
+
+  // Step 2: set jcr:content properties
+  const contentBody = new URLSearchParams({
+    "jcr:primaryType": "cq:PageContent",
+    "jcr:title": title,
+    "cq:template": template,
+    "sling:resourceType": "wcm/foundation/components/responsivegrid",
+    ...extraProperties,
+  });
+  const contentRes = await aemFetch(`${parentPath}/${pageName}/jcr:content`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: contentBody.toString(),
+  });
+
+  if (!contentRes.ok) {
+    const text = await contentRes.text();
+    return { success: false, error: `Failed to set page content (${contentRes.status}): ${text.slice(0, 200)}` };
+  }
+
+  return { success: true, path: `${parentPath}/${pageName}` };
+}
+
 export async function tailErrorLog(lines = 100): Promise<string> {
   try {
     const res = await aemFetch(`/system/console/slinglog/tailer.txt?tail=${lines}&name=%2Flogs%2Ferror.log`);

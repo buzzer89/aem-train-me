@@ -13,7 +13,8 @@ import {
   flatFileList,
   startFileTurn,
 } from "./file-manager.js";
-import { checkBundleStatus, checkHttpStatus, tailErrorLog } from "./aem-client.js";
+import { checkBundleStatus, checkHttpStatus, tailErrorLog, createAemPage } from "./aem-client.js";
+import { buildEngine } from "./build-engine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -112,7 +113,8 @@ function getDefaultSystemPrompt(): string {
 - Context-Aware Configurations
 - Frontend (ClientLibs structure)
 
-IMPORTANT: Always call write_file for EVERY file you generate. Do not just show code — actually create the files in the project.`;
+IMPORTANT: Always call write_file for EVERY file you generate. Do not just show code — actually create the files in the project.
+IMPORTANT: After writing any .java file, call compile_check once. If it fails, fix the errors and call compile_check one more time. Maximum 2 compile attempts — then proceed regardless and note any remaining issues.`;
 }
 
 type OnChunk = (text: string) => void;
@@ -130,12 +132,15 @@ export interface AgentCallbacks {
 async function executeToolCall(
   name: string,
   args: Record<string, unknown>,
-  turnId: string
+  turnId: string,
+  onProgress?: (text: string) => void
 ): Promise<string> {
   switch (name) {
     case "write_file": {
-      const filePath = args.path as string;
-      const content = args.content as string;
+      const filePath = (args.path ?? args.file_path ?? args.filepath ?? args.filename) as string | undefined;
+      const content = (args.content ?? args.file_content ?? args.text) as string | undefined;
+      if (!filePath) return JSON.stringify({ error: "write_file called without a 'path' argument" });
+      if (content === undefined) return JSON.stringify({ error: "write_file called without a 'content' argument" });
       writeProjectFile(filePath, content, turnId);
       return JSON.stringify({ success: true, path: filePath, message: `File written: ${filePath}` });
     }
@@ -167,6 +172,28 @@ async function executeToolCall(
       const lines = (args.lines as number) || 100;
       const logs = await tailErrorLog(lines);
       return logs;
+    }
+    case "compile_check": {
+      onProgress?.("\n```\n");
+      const result = await buildEngine.runCompileCheck((line) => {
+        // Stream compiler output lines live so the user sees progress
+        onProgress?.(line + "\n");
+      });
+      onProgress?.("```\n");
+      const status = result.success
+        ? "✅ Compilation successful — no errors."
+        : "❌ Compilation FAILED — fix the errors below before proceeding.";
+      return JSON.stringify({ success: result.success, status, output: result.output });
+    }
+    case "create_aem_page": {
+      const result = await createAemPage({
+        parentPath: args.parent_path as string,
+        pageName: args.page_name as string,
+        title: args.title as string,
+        template: args.template as string,
+        extraProperties: (args.extra_properties ?? {}) as Record<string, string>,
+      });
+      return JSON.stringify(result);
     }
     case "get_project_config": {
       return JSON.stringify({
@@ -299,13 +326,19 @@ export async function runAgent(
           args = {};
         }
 
-        const result = await executeToolCall(tc.name, args, turnId);
+        const result = await executeToolCall(tc.name, args, turnId, callbacks.onChunk);
 
-        if (tc.name === "write_file" && args.path) {
-          filesCreated.push(args.path as string);
+        // Resolve the actual path used (AI sometimes uses file_path / filepath instead of path)
+        const resolvedPath =
+          (args.path ?? args.file_path ?? args.filepath ?? args.filename) as string | undefined;
+
+        if (tc.name === "write_file" && resolvedPath) {
+          filesCreated.push(resolvedPath);
         }
 
-        callbacks.onToolCall?.(tc.name, args, result);
+        // Pass resolved args so the frontend always has the correct path to display
+        const displayArgs = { ...args, path: resolvedPath };
+        callbacks.onToolCall?.(tc.name, displayArgs, result);
 
         messages.push({
           role: "tool",
@@ -313,6 +346,16 @@ export async function runAgent(
           content: result,
         });
       }
+    }
+
+    // If the AI wrote files but produced no text response, synthesize a brief summary
+    // so the chat panel always shows something meaningful.
+    if (!fullResponse.trim() && filesCreated.length > 0) {
+      const summary =
+        `**${filesCreated.length} file${filesCreated.length > 1 ? "s" : ""} updated:**\n\n` +
+        filesCreated.map((f) => `- \`${f}\``).join("\n");
+      callbacks.onChunk(summary);
+      fullResponse = summary;
     }
 
     callbacks.onFilesCreated?.(filesCreated);

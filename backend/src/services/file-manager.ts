@@ -21,6 +21,29 @@ export interface CategorizedTree {
 
 const projectPath = () => config.aemProject.path;
 
+/**
+ * Fix unescaped XML special characters inside attribute values of JCR DocView XML files.
+ * The AI occasionally writes raw HTML (e.g. `<p>text</p>`) into attribute values which
+ * causes FileVault to reject the file with a parse error.
+ */
+function sanitizeDocViewXml(content: string): string {
+  // Match every double-quoted attribute value and normalize its escaping.
+  // Strategy: fully unescape, then re-escape — handles both already-escaped and raw input.
+  return content.replace(/="([^"]*)"/g, (_match, val: string) => {
+    const unescaped = val
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, '"');
+    const reescaped = unescaped
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+    return `="${reescaped}"`;
+  });
+}
+
 function ensureWithinProject(filePath: string): string {
   const resolved = path.resolve(projectPath(), filePath);
   if (!resolved.startsWith(path.resolve(projectPath()))) {
@@ -50,8 +73,13 @@ export function writeProjectFile(relativePath: string, content: string, turnId?:
     }
   }
 
+  const finalContent =
+    (relativePath.endsWith(".content.xml") || relativePath.endsWith("_cq_dialog/.content.xml"))
+      ? sanitizeDocViewXml(content)
+      : content;
+
   fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, content, "utf-8");
+  fs.writeFileSync(abs, finalContent, "utf-8");
 }
 
 export function undoTurn(turnId: string): string[] {

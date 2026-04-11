@@ -71,6 +71,58 @@ class BuildEngine extends EventEmitter {
     });
   }
 
+  /**
+   * Run `mvn compile` on the core module only — fast compilation check without deployment.
+   * Returns success flag and the last 100 lines of output (errors / warnings).
+   */
+  async runCompileCheck(onLine?: (line: string) => void): Promise<{ success: boolean; output: string }> {
+    if (this.currentProcess) {
+      return { success: false, output: "A build is already in progress — try again after it finishes." };
+    }
+
+    const TIMEOUT_MS = 90_000; // 90 second hard limit
+
+    return new Promise((resolve) => {
+      let output = "";
+      let lineBuffer = "";
+      let settled = false;
+
+      const settle = (success: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (lineBuffer) onLine?.(lineBuffer);
+        const trimmed = output.split("\n").slice(-120).join("\n");
+        resolve({ success, output: trimmed });
+      };
+
+      const handleChunk = (chunk: string) => {
+        output += chunk;
+        lineBuffer += chunk;
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() ?? "";
+        for (const line of lines) onLine?.(line);
+      };
+
+      const proc = spawn(
+        config.build.mavenCmd,
+        ["compile", "-pl", "core", "--no-transfer-progress"],
+        { cwd: config.aemProject.path, env: { ...process.env }, shell: true }
+      );
+
+      const timer = setTimeout(() => {
+        proc.kill("SIGTERM");
+        output += "\n[compile_check timed out after 90s]";
+        settle(false);
+      }, TIMEOUT_MS);
+
+      proc.stdout?.on("data", (data: Buffer) => handleChunk(data.toString()));
+      proc.stderr?.on("data", (data: Buffer) => handleChunk(data.toString()));
+      proc.on("close", (code) => settle(code === 0));
+      proc.on("error", (err) => { output += "\n" + err.message; settle(false); });
+    });
+  }
+
   cancel(): void {
     if (this.currentProcess) {
       this.currentProcess.kill("SIGTERM");

@@ -35,19 +35,20 @@ When asked to create ANY AEM feature, you MUST generate **ALL** necessary files 
 - **Editable templates** over static templates
 - **ClientLib categories** — proper dependency and embed chains
 
-### 3. Always Create Test Pages
-For **EVERY** feature, create a test page at:
-```
-ui.content/src/main/content/jcr_root/content/{{contentRoot}}/trainer-tests/{feature-name}/.content.xml
-```
+### 3. Always Create Test Pages (via AEM HTTP — NOT .content.xml)
 
-The test page must:
-- Be a `cq:Page` with a `jcr:content` child of type `cq:PageContent`
-- Reference an editable template (`/conf/{{contentRoot}}/settings/wcm/templates/page-content` or similar)
-- For **components**: pre-place the component in the `responsivegrid` with sample authored content
-- For **servlets**: include a text component with a link to the servlet endpoint
-- For **services**: include a lightweight test-harness component or instructions
-- For **filters**: instructions on what to observe in the browser
+Test pages must be created **live in AEM** using the `create_aem_page` tool — **never** as `.content.xml` files in `ui.content`. This avoids FileVault XML namespace errors and keeps test content out of the deployable package.
+
+**Workflow:**
+1. Use `read_file` to inspect an existing page in the project (e.g. `ui.content/src/main/content/jcr_root/content/{{contentRoot}}/**/.content.xml`) to discover the real template path and `sling:resourceType` in use.
+2. Call `create_aem_page` with:
+   - `parent_path`: `/content/{{contentRoot}}/trainer-tests`
+   - `page_name`: a URL-safe slug for the feature (e.g. `sitemap-feature`)
+   - `title`: a human-readable title
+   - `template`: the template path found in step 1
+3. Call `create_aem_page` **after** the Maven build + deploy step so the feature's resource types are registered before the page is created.
+
+**Do NOT** write any `.content.xml` file under `ui.content/.../trainer-tests/` — test pages live only in AEM, not in source control.
 
 ### 4. Explain Every File
 For each file you create, explain in your response:
@@ -124,3 +125,5 @@ Structure EVERY feature-creation response with these exact sections:
 3. **ALWAYS** use the project config values (groupId, package names, paths) — never hardcode
 4. **ALWAYS** call `get_project_config` first if you haven't seen the config yet
 5. The trainee should be able to `mvn clean install -PautoInstallSinglePackage` and immediately see results
+6. **XML ESCAPING IN `.content.xml` FILES**: JCR DocView XML attribute values must never contain raw `<` or `>`. Always escape them as `&lt;` and `&gt;`. This applies to dialog XMLs, component definitions, and OSGi config files — but NOT test pages (which use `create_aem_page` instead).
+7. **MANDATORY COMPILE CHECK**: After writing any `.java` file, you MUST call `compile_check` once to verify there are no compilation errors. If it fails, fix the reported errors with `write_file` and call `compile_check` one more time (maximum 2 compile attempts total). If `compile_check` times out or is still failing after 2 attempts, proceed and note the issue to the trainee. Never loop more than twice.

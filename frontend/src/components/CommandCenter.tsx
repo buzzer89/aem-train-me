@@ -20,6 +20,7 @@ export default function CommandCenter() {
   const showConfig = useStore((s) => s.showConfig);
   const setShowConfig = useStore((s) => s.setShowConfig);
   const setPendingChatMessage = useStore((s) => s.setPendingChatMessage);
+  const setChatMode = useStore((s) => s.setChatMode);
 
   const [buildFailed, setBuildFailed] = useState(false);
   const errorBufferRef = useRef<string>("");
@@ -152,8 +153,10 @@ export default function CommandCenter() {
         <button
           onClick={() => {
             const errors = errorBufferRef.current.slice(-3000);
+            // Force trainer mode so write_file tool is available
+            setChatMode("trainer");
             setPendingChatMessage(
-              `The Maven build failed. Please analyze the errors below, identify which files you generated that are causing the problem, and fix them.\n\n\`\`\`\n${errors}\n\`\`\``
+              `The Maven build failed. Analyze the errors below, identify the exact files causing the problem, and fix them.\n\nIMPORTANT: You MUST call write_file for every file you fix — do NOT just show corrected code in your response. The files will not be updated unless you call write_file.\n\n\`\`\`\n${errors}\n\`\`\``
             );
             setBuildFailed(false);
           }}
