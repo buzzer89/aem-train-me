@@ -12,6 +12,12 @@ export interface CategorizedTree {
   services: FileNode[];
   filters: FileNode[];
   frontend: FileNode[];
+  clientlibs: FileNode[];
+  unitTests: FileNode[];
+  integrationTests: FileNode[];
+  osgiConfigs: FileNode[];
+  content: FileNode[];
+  conf: FileNode[];
   other: FileNode[];
 }
 
@@ -21,6 +27,7 @@ export interface ChatMessage {
   content: string;
   filesCreated?: string[];
   toolCalls?: ToolCallEvent[];
+  undoTurnId?: string;
   timestamp: number;
 }
 
@@ -32,7 +39,7 @@ export interface ToolCallEvent {
 
 export interface ConsoleLine {
   text: string;
-  type: "info" | "error" | "success" | "validation";
+  type: "info" | "error" | "success" | "validation" | "warning";
   timestamp: number;
 }
 

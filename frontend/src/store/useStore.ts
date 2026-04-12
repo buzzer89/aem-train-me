@@ -34,6 +34,10 @@ interface AppState {
   // Config panel
   showConfig: boolean;
   setShowConfig: (v: boolean) => void;
+
+  // Auto-send a message from outside the chat panel (e.g. "Fix with AI" from build failure)
+  pendingChatMessage: string | null;
+  setPendingChatMessage: (msg: string | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -78,4 +82,8 @@ export const useStore = create<AppState>((set) => ({
   // Config
   showConfig: false,
   setShowConfig: (v) => set({ showConfig: v }),
+
+  // Pending chat message
+  pendingChatMessage: null,
+  setPendingChatMessage: (msg) => set({ pendingChatMessage: msg }),
 }));

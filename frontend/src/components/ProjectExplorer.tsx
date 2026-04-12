@@ -21,6 +21,12 @@ const categoryLabels: Record<keyof CategorizedTree, string> = {
   services: "SERVICES",
   filters: "FILTERS",
   frontend: "FRONTEND",
+  clientlibs: "CLIENTLIBS",
+  unitTests: "UNIT TESTS",
+  integrationTests: "INTEGRATION TESTS",
+  osgiConfigs: "OSGI CONFIGS",
+  content: "CONTENT",
+  conf: "CONF (TEMPLATES / POLICIES)",
   other: "OTHER",
 };
 
@@ -30,11 +36,17 @@ const categoryOrder: (keyof CategorizedTree)[] = [
   "servlets",
   "services",
   "filters",
+  "unitTests",
+  "integrationTests",
+  "osgiConfigs",
+  "clientlibs",
   "frontend",
+  "content",
+  "conf",
 ];
 
 function TreeNode({ node, depth = 0 }: Readonly<{ node: FileNode; depth?: number }>) {
-  const [expanded, setExpanded] = useState(depth < 2);
+  const [expanded, setExpanded] = useState(false);
   const setSelectedFile = useStore((s) => s.setSelectedFile);
 
   if (node.type === "file") {

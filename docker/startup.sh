@@ -16,6 +16,13 @@ fi
 # Ensure workspace directories exist (volume mount overrides image layers)
 mkdir -p /workspace/aem-projects
 
+# Sync all AI_* vars from Docker environment into /workspace/.env so that
+# values set in the project .env (via env_file / environment in docker-compose)
+# are not silently overwritten when /workspace/.env is sourced below.
+[ -n "$AI_API_KEY" ]  && sed -i "s|^AI_API_KEY=.*|AI_API_KEY=${AI_API_KEY}|"   /workspace/.env
+[ -n "$AI_MODEL" ]    && sed -i "s|^AI_MODEL=.*|AI_MODEL=${AI_MODEL}|"           /workspace/.env
+[ -n "$AI_PROVIDER" ] && sed -i "s|^AI_PROVIDER=.*|AI_PROVIDER=${AI_PROVIDER}|" /workspace/.env
+
 # Load persisted config from /workspace/.env FIRST so values saved by the
 # Setup Wizard (e.g. AEM_PROJECT_PATH) are restored on restart.
 set -o allexport
@@ -27,6 +34,8 @@ set +o allexport
 export ENV_FILE=/workspace/.env
 export DB_PATH=${DB_PATH:-/workspace/data.db}
 export PROMPT_PATH=${PROMPT_PATH:-/app/prompts/aem-architect.md}
+# Base directory where new AEM Maven projects are generated — must be on the volume
+export AEM_PROJECTS_DIR=/workspace/aem-projects
 # AEM_PROJECT_PATH intentionally NOT set here — it comes from /workspace/.env
 # (written by persistEnv() when a project is generated via the Setup Wizard)
 

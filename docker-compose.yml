@@ -10,6 +10,8 @@ services:
       - "3000:3000"   # Train-Me frontend UI
       - "3001:3001"   # Train-Me backend API
       - "4502:4502"   # AEM Author instance
+    env_file:
+      - .env
     volumes:
       - aem-repo:/aem/crx-quickstart   # AEM repository data (persists across restarts)
       - workspace:/workspace            # AEM projects, .env state, SQLite DB, logs

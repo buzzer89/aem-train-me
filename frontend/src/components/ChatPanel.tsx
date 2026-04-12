@@ -17,6 +17,7 @@ const SUGGESTIONS = [
 
 export default function ChatPanel() {
   const [input, setInput] = useState("");
+  const [streamingStatus, setStreamingStatus] = useState("Trainer is writing code...");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -31,6 +32,8 @@ export default function ChatPanel() {
   const setIsStreaming = useStore((s) => s.setIsStreaming);
   const setFileTree = useStore((s) => s.setFileTree);
   const clearMessages = useStore((s) => s.clearMessages);
+  const pendingChatMessage = useStore((s) => s.pendingChatMessage);
+  const setPendingChatMessage = useStore((s) => s.setPendingChatMessage);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -40,8 +43,21 @@ export default function ChatPanel() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const sendMessage = (text: string) => {
+  // Auto-send messages triggered externally (e.g. "Fix with AI" from build failure).
+  // Read chatMode directly from the store (not the closure) so we always get the
+  // value set by the caller (e.g. CommandCenter forces "trainer" mode before setting
+  // the pending message).
+  useEffect(() => {
+    if (!pendingChatMessage || isStreaming) return;
+    const currentMode = useStore.getState().chatMode;
+    setPendingChatMessage(null);
+    sendMessage(pendingChatMessage, currentMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingChatMessage]);
+
+  const sendMessage = (text: string, modeOverride?: "trainer" | "general") => {
     if (!text.trim() || isStreaming) return;
+    const effectiveMode = modeOverride ?? chatMode;
 
     const userMsg = {
       id: crypto.randomUUID(),
@@ -63,13 +79,18 @@ export default function ChatPanel() {
     addMessage(assistantMsg);
     setIsStreaming(true);
 
-    streamChat(text.trim(), sessionId, chatMode, {
+    streamChat(text.trim(), sessionId, effectiveMode, {
       onChunk(chunk) {
         appendToLastMessage(chunk);
       },
       onToolCall(name, args) {
         if (name === "write_file") {
+          setStreamingStatus(`Writing \`${args.path}\`...`);
           appendToLastMessage(`\n> 📁 Writing: \`${args.path}\`\n`);
+        } else if (name === "compile_check") {
+          setStreamingStatus("Running compile check (mvn compile)...");
+        } else if (name === "create_aem_page") {
+          setStreamingStatus("Creating AEM test page...");
         }
       },
       onFilesCreated(files) {
@@ -90,12 +111,24 @@ export default function ChatPanel() {
       onSessionId(id) {
         setSessionId(id);
       },
-      onDone() {
+      onDone(turnId) {
+        if (turnId) {
+          useStore.setState((s) => {
+            const msgs = [...s.messages];
+            const last = msgs[msgs.length - 1];
+            if (last && last.role === "assistant") {
+              msgs[msgs.length - 1] = { ...last, undoTurnId: turnId };
+            }
+            return { messages: msgs };
+          });
+        }
         setIsStreaming(false);
+        setStreamingStatus("Trainer is writing code...");
       },
       onError(error) {
         appendToLastMessage(`\n\n**Error:** ${error}`);
         setIsStreaming(false);
+        setStreamingStatus("Trainer is writing code...");
       },
     });
   };
@@ -219,7 +252,7 @@ export default function ChatPanel() {
         </div>
         {isStreaming && (
           <div className="mt-2 text-xs text-deloitte-green animate-pulse">
-            Trainer is writing code...
+            {streamingStatus}
           </div>
         )}
       </div>

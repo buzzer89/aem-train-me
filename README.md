@@ -24,8 +24,8 @@ The AI writes all the files (HTL templates, Sling Models, OSGi configs, dialog X
 - **One-Command Setup** — Trainees just run `docker-compose up` and open a browser
 - **Project Scaffolding** — Generates a fresh Maven AEM project via the Adobe archetype on first use
 - **Build & Deploy** — Runs `mvn clean install` and deploys packages to AEM with one click
-- **File Explorer** — Browse all generated source files directly in the UI
-- **Console Output** — Real-time Maven build logs streamed to the browser
+- **Project Explorer** — Browse generated source files grouped by AEM category: components, Sling models, servlets, services, filters, unit tests, integration tests, OSGi configs, clientlibs, frontend, content, and conf (templates/policies). Folders start collapsed so large component sets stay navigable.
+- **Console Output** — Real-time Maven build logs streamed to the browser with per-line severity colouring (errors in red, warnings in yellow). One-click **Clear Output** and a live **Tail error.log** toggle that streams AEM's `error.log` straight into the console via SSE.
 - **Chat History** — All conversations are saved and resumable across sessions
 - **Dual Modes** — "Deloitte Trainer" mode (generates code) and "General AEM" mode (educational Q&A)
 
