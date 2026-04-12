@@ -18,6 +18,7 @@ These values come from your runtime config. Use them in all generated code:
 ### 1. Generate Complete, Deployable Code
 When asked to create ANY AEM feature, generate **ALL** necessary files using `write_file`:
 - Java classes (Sling Models, Servlets, Services, Filters, Schedulers, Workflow Steps)
+- `package-info.java` for every new Java package (check with `list_project_files` first)
 - HTL/Sightly templates (`.html`)
 - Component definition (`.content.xml` with `jcr:primaryType=cq:Component`)
 - Component dialog (`_cq_dialog/.content.xml`)
@@ -230,6 +231,34 @@ No `<%`, `<jsp:`, `<c:`, JSTL, or Groovy scripts. HTL only.
 public class HeroBannerImpl implements HeroBanner {
 ```
 
+**SM-1a — package-info.java FOR EVERY NEW PACKAGE**
+
+Every new Java package created under `core/src/main/java/` MUST include a `package-info.java` file. Without it the OSGi bundle manifest omits the package version, which can cause class-not-found errors at runtime and breaks semantic versioning contracts.
+
+File path: `core/src/main/java/{{packagePath}}/core/<package>/package-info.java`
+
+```java
+@Version("1.0")
+package {{groupId}}.core.<package>;
+
+import org.osgi.annotation.versioning.Version;
+```
+
+Examples for each package type:
+```
+core/src/main/java/{{packagePath}}/core/models/package-info.java
+core/src/main/java/{{packagePath}}/core/models/impl/package-info.java
+core/src/main/java/{{packagePath}}/core/servlets/package-info.java
+core/src/main/java/{{packagePath}}/core/services/package-info.java
+core/src/main/java/{{packagePath}}/core/services/impl/package-info.java
+core/src/main/java/{{packagePath}}/core/schedulers/package-info.java
+core/src/main/java/{{packagePath}}/core/filters/package-info.java
+core/src/main/java/{{packagePath}}/core/listeners/package-info.java
+core/src/main/java/{{packagePath}}/core/workflows/package-info.java
+```
+
+**Rule**: When you call `write_file` for ANY new `.java` class, check whether `package-info.java` already exists in that package (via `list_project_files`). If it does not exist, write it immediately after writing the first class in that package.
+
 **SM-1b — NEVER INJECT SERVICES YOU DON'T USE**
 ```java
 // ❌ WRONG — injecting LinkManager but never calling it
@@ -349,20 +378,41 @@ resolverFactory.getAdministrativeResourceResolver(null);
 
 ### OSGi Services
 
-**OSGI-0 — BUNDLE DEPENDENCY SCOPES (non-negotiable)**
-All AEM-provided libraries MUST use `<scope>provided</scope>` in `core/pom.xml`. Embedding or compiling against a newer version than AEM ships causes `Cannot be resolved` bundle wiring failures at startup.
+**OSGI-0 — BUNDLE DEPENDENCY SCOPES + IMPORT-PACKAGE (non-negotiable)**
 
-Critical provided dependencies (never embed these):
+**Root cause**: bnd (inside `maven-bundle-plugin`) reads the declared dependency version in `pom.xml` and auto-generates `Import-Package: org.apache.commons.lang3;version="[3.20,4)"`. AEM ships 3.12/3.13 — outside that range — so the OSGi resolver rejects the bundle at startup with `Cannot be resolved`.
+
+**The fix is always two steps applied together in `core/pom.xml`:**
+
+---
+
+**Step 1 — Every AEM-provided library MUST have `<scope>provided</scope>`**
+
+AEM ships these in its OSGi runtime. Never embed them — declare provided:
+
+| Dependency | Typical AEM version | Import range to use |
+|---|---|---|
+| `org.apache.commons:commons-lang3` | 3.12 (6.5) / 3.13 (CS) | `[3.0,4)` |
+| `commons-io:commons-io` | 2.6 | `[2.0,3)` |
+| `commons-collections:commons-collections` | 3.2 | `[3.0,4)` |
+| `org.apache.commons:commons-collections4` | 4.1 | `[4.0,5)` |
+| `com.google.guava:guava` | 26–30 | `[15.0,35)` |
+| `com.fasterxml.jackson.core:jackson-core` | 2.x | `[2.0,3)` |
+| `com.fasterxml.jackson.core:jackson-databind` | 2.x | `[2.0,3)` |
+| `org.apache.httpcomponents:httpclient` | 4.x | `[4.0,5)` |
+| `org.apache.httpcomponents:httpcore` | 4.x | `[4.0,5)` |
+| `org.slf4j:slf4j-api` | 1.7 | `[1.7,2)` |
+| `javax.servlet:javax.servlet-api` | 3.1 | `[2.4,4)` |
+| `javax.jcr:jcr` | 2.0 | `[2.0,3)` |
+| `org.apache.jackrabbit:jackrabbit-api` | 2.x | `[2.0,3)` |
+| `org.osgi:org.osgi.core` | 6.x | `[4.0,7)` |
+| `org.osgi:org.osgi.service.component.annotations` | 1.4 | `[1.0,2)` |
+
 ```xml
-<!-- AEM ships these — always provided -->
+<!-- All of these go in core/pom.xml <dependencies> with provided scope -->
 <dependency>
   <groupId>org.apache.commons</groupId>
   <artifactId>commons-lang3</artifactId>
-  <scope>provided</scope>   <!-- AEM 6.5 ships 3.12, AEMaaCS ships 3.13 -->
-</dependency>
-<dependency>
-  <groupId>com.google.guava</groupId>
-  <artifactId>guava</artifactId>
   <scope>provided</scope>
 </dependency>
 <dependency>
@@ -370,9 +420,25 @@ Critical provided dependencies (never embed these):
   <artifactId>commons-io</artifactId>
   <scope>provided</scope>
 </dependency>
+<dependency>
+  <groupId>com.google.guava</groupId>
+  <artifactId>guava</artifactId>
+  <scope>provided</scope>
+</dependency>
+<dependency>
+  <groupId>com.fasterxml.jackson.core</groupId>
+  <artifactId>jackson-databind</artifactId>
+  <scope>provided</scope>
+</dependency>
+<!-- Add others from the table above as needed -->
 ```
 
-If you need a wider OSGi import range (to accept any 3.x), configure `maven-bundle-plugin` in `core/pom.xml`:
+---
+
+**Step 2 — Override Import-Package ranges in `maven-bundle-plugin`**
+
+bnd locks the import to the exact declared version. Override ALL AEM-provided packages with wide ranges so the bundle wires against whatever AEM actually ships:
+
 ```xml
 <plugin>
   <groupId>org.apache.felix</groupId>
@@ -380,11 +446,36 @@ If you need a wider OSGi import range (to accept any 3.x), configure `maven-bund
   <extensions>true</extensions>
   <configuration>
     <instructions>
-      <Import-Package>org.apache.commons.lang3.*;version="[3.0,4)",*</Import-Package>
+      <Import-Package>
+        org.apache.commons.lang3.*;version="[3.0,4)",
+        org.apache.commons.io.*;version="[2.0,3)",
+        org.apache.commons.collections.*;version="[3.0,5)",
+        com.google.common.*;version="[15.0,35)",
+        com.fasterxml.jackson.*;version="[2.0,3)",
+        org.apache.http.*;version="[4.0,5)",
+        org.slf4j.*;version="[1.7,2)",
+        javax.servlet.*;version="[2.4,4)",
+        *
+      </Import-Package>
     </instructions>
   </configuration>
 </plugin>
 ```
+
+The `*` at the end is **mandatory** — it tells bnd to auto-import all remaining packages at their normal computed ranges.
+
+---
+
+**Which libraries should NOT be provided (embed these instead):**
+Any library that AEM does NOT ship — e.g. a custom CSV parser, a PDF library, or any third-party SDK not in the AEM SDK uber-jar. Use `compile` scope (default) and add to `maven-bundle-plugin` `<Embed-Dependency>` if needed.
+
+---
+
+**Trigger — apply this check on EVERY feature:**
+When you write any `.java` file, immediately call `read_file` on `core/pom.xml`. For every `import` statement in the Java file that matches a library in the table above:
+1. Confirm the dependency exists with `<scope>provided</scope>` — add it if missing
+2. Confirm `maven-bundle-plugin` `<Import-Package>` covers that package with a wide range — add the entry if missing
+3. Call `write_file` on `core/pom.xml` with the fixes before proceeding
 
 **OSGI-1 — INTERFACE + IMPL PATTERN**
 ```java
@@ -587,9 +678,20 @@ ui.apps/src/main/content/jcr_root/apps/{{appsFolder}}/clientlibs/
 
 ### Dialog XML
 
-**DLG-1 — NAMESPACE DECLARATIONS ON ROOT ELEMENT**
-Every `.content.xml` that uses namespace prefixes MUST declare them. Missing declarations cause:
-`The prefix "cq" for attribute "cq:template" is not bound.`
+**DLG-1 — TOUCH UI DIALOG ROOT NODE (non-negotiable)**
+
+AEM dialogs are **Touch UI (Coral/Granite)**. The root node MUST use `sling:resourceType`, NOT `jcr:primaryType="cq:Dialog"`.
+
+```
+❌ WRONG — Classic UI (ExtJS, deprecated since AEM 6.0):
+   jcr:primaryType="cq:Dialog"
+
+✅ CORRECT — Touch UI (Coral/Granite):
+   jcr:primaryType="nt:unstructured"
+   sling:resourceType="cq/gui/components/authoring/dialog"
+```
+
+Complete correct `_cq_dialog/.content.xml` root:
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <jcr:root
@@ -598,9 +700,12 @@ Every `.content.xml` that uses namespace prefixes MUST declare them. Missing dec
     xmlns:jcr="http://www.jcp.org/jcr/1.0"
     xmlns:nt="http://www.jcp.org/jcr/nt/1.0"
     xmlns:granite="http://www.adobe.com/jcr/granite/1.0"
-    jcr:primaryType="cq:Dialog"
-    jcr:title="Hero Banner">
+    jcr:primaryType="nt:unstructured"
+    jcr:title="Hero Banner"
+    sling:resourceType="cq/gui/components/authoring/dialog">
 ```
+
+Every `.content.xml` root element MUST also declare all XML namespace prefixes used anywhere in the file. Missing declarations cause: `The prefix "cq" for attribute "cq:template" is not bound.`
 
 **DLG-2 — GRANITE UI FIELD REFERENCE**
 ```xml
@@ -665,7 +770,12 @@ Every `.content.xml` that uses namespace prefixes MUST declare them. Missing dec
 
 **DLG-3 — TAB CONTAINER PATTERN**
 ```xml
-<jcr:root ... jcr:primaryType="cq:Dialog">
+<jcr:root xmlns:sling="http://sling.apache.org/jcr/sling/1.0"
+          xmlns:jcr="http://www.jcp.org/jcr/1.0"
+          xmlns:nt="http://www.jcp.org/jcr/nt/1.0"
+          jcr:primaryType="nt:unstructured"
+          jcr:title="Hero Banner"
+          sling:resourceType="cq/gui/components/authoring/dialog">
     <content jcr:primaryType="nt:unstructured"
         sling:resourceType="granite/ui/components/coral/foundation/container">
         <items jcr:primaryType="nt:unstructured">
@@ -1465,6 +1575,24 @@ ctx.registerService(MyService.class, service);
 ❌  Testing private methods — test via public interface only
 ❌  One @Test method with multiple assertions and no @DisplayName
      — hard to diagnose which assertion failed
+
+❌  CRITICAL: Creating AemContext inside @BeforeEach — causes
+     "SAXNotRecognizedException: Feature secure-processing is not recognized"
+     AemContext MUST be declared as a final field, never inside a method:
+
+     // ❌ WRONG — triggers SAXNotRecognizedException at setUp line N
+     private AemContext ctx;
+     @BeforeEach void setUp() {
+         ctx = new AemContext(ResourceResolverType.JCR_MOCK);
+     }
+
+     // ✅ CORRECT — declare as final field
+     private final AemContext ctx = new AemContext(ResourceResolverType.RESOURCERESOLVER_MOCK);
+
+❌  CRITICAL: Using ResourceResolverType.JCR_MOCK or JCR_OAK — these pull in
+     Oak XML parser dependencies that conflict with the JDK parser and cause
+     SAXNotRecognizedException. ALWAYS use RESOURCERESOLVER_MOCK for unit tests.
+     Only JCR_OAK is needed for integration tests that actually traverse a JCR tree.
 ```
 
 ---
@@ -1485,4 +1613,8 @@ ctx.registerService(MyService.class, service);
 12. **ALWAYS** use `try-with-resources` for ResourceResolver
 13. **COMPILE CHECK**: After writing any `.java` file, call `compile_check` once. If it fails, fix and call once more (max 2 attempts). Proceed and note remaining issues if still failing.
 14. The trainee must be able to run `mvn clean install -PautoInstallPackage` and see results immediately.
-15. **data-sly-use MUST reference the `impl` class** — `com.example.core.models.impl.HeroBannerImpl`, NEVER the interface `com.example.core.models.HeroBanner`. Using an interface causes `cannot be resolved to a type` HTL compile errors because only the `@Model`-annotated impl is registered with Sling's adapter factory.
+15. **Every AEM-provided library needs `<scope>provided</scope>` AND a wide `Import-Package` range** — after writing any `.java` file, read `core/pom.xml` and for every imported library that AEM ships (commons-lang3, commons-io, guava, jackson, httpclient, slf4j, etc.) verify: (a) dependency has `<scope>provided</scope>`, and (b) `maven-bundle-plugin` `<Import-Package>` has a wide version range like `[3.0,4)` instead of the exact bnd-computed range. Fix `core/pom.xml` immediately if either is wrong — a tight version range causes `Cannot be resolved` OSGi bundle startup failure. See OSGI-0 for the full table and correct ranges.
+16. **Every new Java package needs `package-info.java`** — `@Version("1.0") package com.x.core.models.impl; import org.osgi.annotation.versioning.Version;`. Check with `list_project_files` before writing the first class in any new package; write `package-info.java` if missing.
+16. **Dialog root node MUST use Touch UI** — `jcr:primaryType="nt:unstructured"` + `sling:resourceType="cq/gui/components/authoring/dialog"`. NEVER `jcr:primaryType="cq:Dialog"` (that is the deprecated Classic UI ExtJS format).
+17. **AemContext MUST be a final field, NEVER created in @BeforeEach** — `private final AemContext ctx = new AemContext(ResourceResolverType.RESOURCERESOLVER_MOCK);`. Creating it inside a method causes `SAXNotRecognizedException: secure-processing not recognized` which breaks ALL tests in the class. Before writing any test class, verify this pattern is used. NEVER use `JCR_MOCK` or `JCR_OAK` in unit tests.
+16. **data-sly-use MUST reference the `impl` class** — `com.example.core.models.impl.HeroBannerImpl`, NEVER the interface `com.example.core.models.HeroBanner`. Using an interface causes `cannot be resolved to a type` HTL compile errors because only the `@Model`-annotated impl is registered with Sling's adapter factory.

@@ -16,6 +16,12 @@ export interface CategorizedTree {
   services: FileNode[];
   filters: FileNode[];
   frontend: FileNode[];
+  clientlibs: FileNode[];
+  unitTests: FileNode[];
+  integrationTests: FileNode[];
+  osgiConfigs: FileNode[];
+  content: FileNode[];
+  conf: FileNode[];
   other: FileNode[];
 }
 
@@ -165,6 +171,12 @@ export function getCategorizedTree(): CategorizedTree {
     services: [],
     filters: [],
     frontend: [],
+    clientlibs: [],
+    unitTests: [],
+    integrationTests: [],
+    osgiConfigs: [],
+    content: [],
+    conf: [],
     other: [],
   };
 
@@ -174,6 +186,14 @@ export function getCategorizedTree(): CategorizedTree {
   );
   if (fs.existsSync(componentsDir)) {
     categories.components = buildTree(componentsDir, 0, 3);
+  }
+
+  const clientlibsDir = path.join(
+    projectPath(),
+    `ui.apps/src/main/content/jcr_root/apps/${appsFolder}/clientlibs`
+  );
+  if (fs.existsSync(clientlibsDir)) {
+    categories.clientlibs = buildTree(clientlibsDir, 0, 4);
   }
 
   const javaBase = path.join(
@@ -191,6 +211,43 @@ export function getCategorizedTree(): CategorizedTree {
     if (fs.existsSync(dir)) {
       categories[key] = buildTree(dir, 0, 3);
     }
+  }
+
+  const unitTestDir = path.join(
+    projectPath(),
+    `core/src/test/java/${groupPath}/core`
+  );
+  if (fs.existsSync(unitTestDir)) {
+    categories.unitTests = buildTree(unitTestDir, 0, 4);
+  }
+
+  const itTestsDir = path.join(projectPath(), "it.tests/src");
+  if (fs.existsSync(itTestsDir)) {
+    categories.integrationTests = buildTree(itTestsDir, 0, 5);
+  }
+
+  const osgiDir = path.join(
+    projectPath(),
+    `ui.config/src/main/content/jcr_root/apps/${appsFolder}/osgiconfig`
+  );
+  if (fs.existsSync(osgiDir)) {
+    categories.osgiConfigs = buildTree(osgiDir, 0, 3);
+  }
+
+  const contentDir = path.join(
+    projectPath(),
+    "ui.content/src/main/content/jcr_root/content"
+  );
+  if (fs.existsSync(contentDir)) {
+    categories.content = buildTree(contentDir, 0, 3);
+  }
+
+  const confDir = path.join(
+    projectPath(),
+    "ui.content/src/main/content/jcr_root/conf"
+  );
+  if (fs.existsSync(confDir)) {
+    categories.conf = buildTree(confDir, 0, 4);
   }
 
   const feDir = path.join(projectPath(), "ui.frontend/src");

@@ -8,6 +8,7 @@ function lineColor(line: ConsoleLine) {
   switch (line.type) {
     case "success": return "text-green-400";
     case "error": return "text-red-400";
+    case "warning": return "text-yellow-400";
     case "validation": return line.text.includes("✓") ? "text-green-400" : "text-red-400";
     default: return "text-gray-300";
   }
