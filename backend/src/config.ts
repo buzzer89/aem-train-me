@@ -38,7 +38,7 @@ export const config = {
 
   build: {
     mavenCmd: env("MAVEN_CMD", "mvn"),
-    profile: env("MAVEN_PROFILE", "autoInstallSinglePackage"),
+    profile: env("MAVEN_PROFILE", "autoInstallPackage"),
   },
 };
 

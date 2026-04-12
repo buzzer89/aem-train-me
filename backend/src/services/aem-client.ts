@@ -175,13 +175,35 @@ export async function runPostDeployValidation(): Promise<Array<{ check: string; 
     detail: `GET /content/${contentRoot}/us/en.html → ${pageCheck.status}`,
   });
 
-  // Check trainer-tests page
+  // Ensure trainer-tests root page exists — auto-create if missing
   const testPageCheck = await checkHttpStatus(`/content/${contentRoot}/trainer-tests.html`);
-  results.push({
-    check: "Trainer Tests Root",
-    passed: testPageCheck.ok || testPageCheck.status === 404,
-    detail: `GET /content/${contentRoot}/trainer-tests.html → ${testPageCheck.status}`,
-  });
+  if (testPageCheck.status === 404) {
+    // Find a template to use from the content root
+    const rootContent = await queryJcr(`/content/${contentRoot}`) as Record<string, unknown> | null;
+    const template =
+      (rootContent?.["jcr:content"] as Record<string, unknown>)?.["cq:template"] as string | undefined
+      ?? `/conf/${contentRoot}/settings/wcm/templates/page`;
+
+    const created = await createAemPage({
+      parentPath: `/content/${contentRoot}`,
+      pageName: "trainer-tests",
+      title: "Trainer Tests",
+      template,
+    });
+    results.push({
+      check: "Trainer Tests Root",
+      passed: created.success,
+      detail: created.success
+        ? `Created /content/${contentRoot}/trainer-tests`
+        : `Auto-create failed: ${created.error}`,
+    });
+  } else {
+    results.push({
+      check: "Trainer Tests Root",
+      passed: testPageCheck.ok,
+      detail: `GET /content/${contentRoot}/trainer-tests.html → ${testPageCheck.status}`,
+    });
+  }
 
   return results;
 }
