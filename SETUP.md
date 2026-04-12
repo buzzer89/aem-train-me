@@ -153,9 +153,9 @@ You'll see output like:
 1. Open http://localhost:3000
 2. On first visit, the **Setup Wizard** appears — use it to generate a new AEM Maven project (e.g. `deloittetraining`)
 3. Once the project is generated, the main interface opens:
-   - **Left panel** — Project Explorer: browse all generated files
+   - **Left panel** — Project Explorer: browse generated files grouped by AEM category (components, Sling models, servlets, services, filters, unit tests, integration tests, OSGi configs, clientlibs, frontend, content, conf). Category folders start collapsed — expand a category to see its top-level folders, then drill in on demand.
    - **Centre panel** — AI Chat: describe the AEM feature you want to build
-   - **Right panel** — Command Centre: build and deploy to AEM, view logs
+   - **Right panel** — Command Centre: build and deploy to AEM, tail AEM's `error.log` live (errors highlighted in red, warnings in yellow), clear console output, and trigger **Fix with AI** after a failed build
 
 The AI trainer will generate complete AEM components, servlets, services, and more — writing all files directly into your Maven project, then helping you build and deploy them to the running AEM instance.
 
