@@ -10,8 +10,6 @@ router.get("/", (_req: Request, res: Response) => {
     aemProject: config.aemProject,
     aemInstance: {
       authorUrl: config.aemInstance.authorUrl,
-      publishUrl: config.aemInstance.publishUrl,
-      // Do not expose credentials
     },
     ai: {
       provider: config.ai.provider,

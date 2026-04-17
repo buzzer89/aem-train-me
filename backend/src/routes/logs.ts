@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { createHash } from "node:crypto";
 import { tailErrorLog } from "../services/aem-client.js";
 
 const router = Router();
@@ -25,15 +26,16 @@ router.get("/stream", (req: Request, res: Response) => {
     (res as Response & { flushHeaders: () => void }).flushHeaders();
   }
 
-  let lastLength = -1;
+  let lastHash = "";
   let closed = false;
 
   const push = async () => {
     if (closed) return;
     const logs = await tailErrorLog(100);
     if (closed) return;
-    if (logs.length !== lastLength) {
-      lastLength = logs.length;
+    const hash = createHash("md5").update(logs).digest("hex");
+    if (hash !== lastHash) {
+      lastHash = hash;
       res.write(`data: ${JSON.stringify({ logs })}\n\n`);
     }
   };

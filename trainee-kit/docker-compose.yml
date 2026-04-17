@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  aem-train-me:
+    image: aem-train-me:latest
+    ports:
+      - "3000:3000"   # Train-Me UI
+      - "3001:3001"   # Train-Me API (internal)
+      - "4502:4502"   # AEM Author instance
+    environment:
+      # REQUIRED — paste your OpenAI or Anthropic API key below
+      - AI_API_KEY=${AI_API_KEY:?Please set AI_API_KEY — see QUICKSTART.md}
+
+      # Optional — uncomment to use Anthropic instead of OpenAI
+      # - AI_PROVIDER=anthropic
+      # - AI_MODEL=claude-sonnet-4-6
+    volumes:
+      - aem-repo:/aem/crx-quickstart   # AEM data (persists across restarts)
+      - workspace:/workspace            # Projects, chat history, config
+    mem_limit: 8g
+    shm_size: 512m
+    restart: unless-stopped
+
+volumes:
+  aem-repo:
+    driver: local
+  workspace:
+    driver: local

@@ -1,6 +1,25 @@
 #!/bin/bash
 set -e
 
+# ── Graceful shutdown ─────────────────────────────────────────────────────
+# Track child PIDs so we can terminate them on container stop.
+CHILD_PIDS=()
+
+cleanup() {
+  echo ""
+  echo "[startup] Shutting down..."
+  for pid in "${CHILD_PIDS[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+  wait
+  echo "[startup] All processes stopped."
+  exit 0
+}
+
+trap cleanup SIGTERM SIGINT SIGHUP
+
 echo "============================================"
 echo "  AEM Train-Me — Container Startup"
 echo "============================================"
@@ -57,12 +76,15 @@ java \
   > /workspace/aem.log 2>&1 &
 
 AEM_PID=$!
+CHILD_PIDS+=("$AEM_PID")
 echo "[startup] AEM PID: $AEM_PID"
+
+AEM_CREDS="${AEM_USERNAME:-admin}:${AEM_PASSWORD:-admin}"
 
 # ── Wait for AEM to be ready ───────────────────────────────────────────────
 echo "[startup] Waiting for AEM to respond at http://localhost:4502 ..."
 WAIT=0
-until curl -sf -u admin:admin \
+until curl -sf -u "$AEM_CREDS" \
     "http://localhost:4502/libs/granite/core/content/login.html" \
     > /dev/null 2>&1; do
   sleep 15
@@ -74,7 +96,7 @@ echo "[startup] AEM is ready! (${WAIT}s)"
 # ── Install AEM Core Components (first boot only) ──────────────────────────
 # Core Components must be present before any trainee project pages can render.
 # We check Package Manager — if already installed (subsequent boots), skip it.
-CORE_PKG_CHECK=$(curl -sf -u admin:admin \
+CORE_PKG_CHECK=$(curl -sf -u "$AEM_CREDS" \
     "http://localhost:4502/crx/packmgr/service.jsp?cmd=ls" \
     | grep -c "core.wcm.components.all" 2>/dev/null || true)
 
@@ -82,7 +104,7 @@ if [ "$CORE_PKG_CHECK" -eq 0 ]; then
   echo "[startup] Installing AEM Core Components..."
   CORE_ZIP=$(ls /aem/packages/core.wcm.components.all-*.zip 2>/dev/null | head -1)
   if [ -n "$CORE_ZIP" ]; then
-    curl -sf -u admin:admin \
+    curl -sf -u "$AEM_CREDS" \
       -F "file=@${CORE_ZIP}" \
       -F "name=core.wcm.components.all" \
       -F "force=true" \
@@ -102,13 +124,17 @@ echo ""
 echo "[startup] Starting train-me backend on port 3001..."
 cd /app/backend
 node dist/index.js > /workspace/backend.log 2>&1 &
-echo "[startup] Backend PID: $!"
+BACKEND_PID=$!
+CHILD_PIDS+=("$BACKEND_PID")
+echo "[startup] Backend PID: $BACKEND_PID"
 
 # ── Start train-me frontend ────────────────────────────────────────────────
 echo "[startup] Starting train-me frontend on port 3000..."
 cd /app/frontend
 npm start > /workspace/frontend.log 2>&1 &
-echo "[startup] Frontend PID: $!"
+FRONTEND_PID=$!
+CHILD_PIDS+=("$FRONTEND_PID")
+echo "[startup] Frontend PID: $FRONTEND_PID"
 
 echo ""
 echo "============================================"
@@ -125,5 +151,7 @@ echo "  Backend:  docker exec <container> tail -f /workspace/backend.log"
 echo "  Frontend: docker exec <container> tail -f /workspace/frontend.log"
 echo ""
 
-# Keep the container alive — exit if AEM crashes
-wait $AEM_PID
+# Keep the container alive — exit if any critical process crashes
+wait -n $AEM_PID $BACKEND_PID $FRONTEND_PID
+echo "[startup] A child process exited — shutting down."
+cleanup

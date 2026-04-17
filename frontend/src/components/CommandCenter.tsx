@@ -120,7 +120,8 @@ export default function CommandCenter() {
       timestamp: Date.now(),
     });
 
-    const src = new EventSource("/api/logs/stream");
+    const streamBase = `${window.location.protocol}//${window.location.hostname}:3001/api`;
+    const src = new EventSource(`${streamBase}/logs/stream`);
     tailSourceRef.current = src;
     setIsTailing(true);
 
@@ -129,24 +130,20 @@ export default function CommandCenter() {
         const data = JSON.parse(ev.data);
         if (typeof data.logs !== "string") return;
         // Stream sends the latest tail snapshot; replace console content.
-        clearConsole();
-        addConsoleLine({
-          text: "[INFO] Tailing error.log (live)...\n",
-          type: "info",
-          timestamp: Date.now(),
-        });
+        // Build the full batch of lines first, then apply in a single state update.
         const now = Date.now();
-        const lines = data.logs.split("\n");
-        // Group consecutive lines of the same severity into one console line
-        // so stack traces stay visually grouped and we avoid 100 state updates.
+        const rawLines = data.logs.split("\n");
+        const batch: Array<{ text: string; type: "info" | "error" | "warning"; timestamp: number }> = [
+          { text: "[INFO] Tailing error.log (live)...\n", type: "info", timestamp: now },
+        ];
         let buffer = "";
         let bufferType: "info" | "error" | "warning" = "info";
         const flush = () => {
           if (!buffer) return;
-          addConsoleLine({ text: buffer, type: bufferType, timestamp: now });
+          batch.push({ text: buffer, type: bufferType, timestamp: now });
           buffer = "";
         };
-        for (const raw of lines) {
+        for (const raw of rawLines) {
           const type = classifyLogLine(raw);
           if (type !== bufferType) {
             flush();
@@ -155,6 +152,8 @@ export default function CommandCenter() {
           buffer += raw + "\n";
         }
         flush();
+        // Single state update instead of N individual addConsoleLine calls
+        useStore.setState({ consoleLines: batch });
       } catch {
         // skip malformed
       }

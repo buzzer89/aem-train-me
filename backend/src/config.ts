@@ -4,7 +4,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: process.env.ENV_FILE || path.resolve(__dirname, "../../.env") });
+
+// Resolve the .env file path BEFORE dotenv loads.
+// In Docker, ENV_FILE is set in the OS environment → use that.
+// Locally, it's not in the OS env → use the repo-root .env.
+// We must capture this now because dotenv will inject ENV_FILE=/workspace/.env
+// from the .env file into process.env, which would mislead persistEnv().
+const resolvedEnvFile = process.env.ENV_FILE || path.resolve(__dirname, "../../.env");
+dotenv.config({ path: resolvedEnvFile });
 
 function env(key: string, fallback?: string): string {
   const val = process.env[key] ?? fallback;
@@ -25,7 +32,6 @@ export const config = {
 
   aemInstance: {
     authorUrl: env("AEM_AUTHOR_URL", "http://localhost:4502"),
-    publishUrl: env("AEM_PUBLISH_URL", "http://localhost:4503"),
     username: env("AEM_USERNAME", "admin"),
     password: env("AEM_PASSWORD", "admin"),
   },
@@ -34,6 +40,12 @@ export const config = {
     provider: env("AI_PROVIDER", "openai") as "openai" | "anthropic",
     model: env("AI_MODEL", "gpt-4"),
     apiKey: env("AI_API_KEY", ""),
+  },
+
+  embedding: {
+    apiKey: env("EMBEDDING_API_KEY", process.env.AI_PROVIDER === "anthropic" ? "" : (process.env.AI_API_KEY ?? "")),
+    model: env("EMBEDDING_MODEL", "text-embedding-3-small"),
+    baseUrl: env("EMBEDDING_BASE_URL", "https://api.openai.com/v1"),
   },
 
   build: {
@@ -65,7 +77,7 @@ export function setProjectConfig(opts: {
 
 /** Persist the current project settings back to the .env file */
 export function persistEnv(): void {
-  const envPath = process.env.ENV_FILE || path.resolve(__dirname, "../../.env");
+  const envPath = resolvedEnvFile;
   const lines: string[] = fs.existsSync(envPath)
     ? fs.readFileSync(envPath, "utf-8").split("\n")
     : [];

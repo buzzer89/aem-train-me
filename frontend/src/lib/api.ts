@@ -1,5 +1,12 @@
 const API_BASE = "/api";
 
+// SSE streams (chat, build, project generation) must go directly to the backend
+// to avoid response buffering by the Next.js rewrite proxy.
+const STREAM_BASE =
+  typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:3001/api`
+    : "/api";
+
 export async function fetchProjectStatus(): Promise<{
   ready: boolean;
   path: string | null;
@@ -24,7 +31,7 @@ export function streamProjectGenerate(
 ): AbortController {
   const controller = new AbortController();
 
-  fetch(`${API_BASE}/project/generate`, {
+  fetch(`${STREAM_BASE}/project/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -132,7 +139,7 @@ export function streamChat(
 ): AbortController {
   const controller = new AbortController();
 
-  fetch(`${API_BASE}/chat`, {
+  fetch(`${STREAM_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, sessionId, mode }),
@@ -210,8 +217,7 @@ export function streamBuild(
   }
 ): AbortController {
   const controller = new AbortController();
-
-  fetch(`${API_BASE}/build`, {
+  fetch(`${STREAM_BASE}/build`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type }),

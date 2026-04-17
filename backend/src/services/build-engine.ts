@@ -10,12 +10,26 @@ export interface BuildResult {
 
 class BuildEngine extends EventEmitter {
   private currentProcess: ChildProcess | null = null;
+  private compileProcess: ChildProcess | null = null;
 
-  get isRunning(): boolean {
-    return this.currentProcess !== null;
+  constructor() {
+    super();
+    this.setMaxListeners(20);
   }
 
-  async runBuild(deploy: boolean, modules?: string[]): Promise<BuildResult> {
+  get isRunning(): boolean {
+    return this.currentProcess !== null || this.compileProcess !== null;
+  }
+
+  async runBuild(
+    deploy: boolean,
+    modules?: string[],
+    callbacks?: {
+      onOutput?: (text: string) => void;
+      onComplete?: (result: { success: boolean; duration: number }) => void;
+      onError?: (msg: string) => void;
+    }
+  ): Promise<BuildResult> {
     if (this.currentProcess) {
       throw new Error("A build is already in progress");
     }
@@ -36,21 +50,21 @@ class BuildEngine extends EventEmitter {
 
       this.currentProcess = spawn(config.build.mavenCmd, args, {
         cwd: config.aemProject.path,
-        env: {
-          ...process.env,
-        },
+        env: { ...process.env },
         shell: true,
       });
 
       this.currentProcess.stdout?.on("data", (data: Buffer) => {
         const text = data.toString();
         output += text;
+        callbacks?.onOutput?.(text);
         this.emit("output", text);
       });
 
       this.currentProcess.stderr?.on("data", (data: Buffer) => {
         const text = data.toString();
         output += text;
+        callbacks?.onOutput?.(text);
         this.emit("output", text);
       });
 
@@ -59,12 +73,16 @@ class BuildEngine extends EventEmitter {
         const success = code === 0;
         this.currentProcess = null;
 
+        // Call the callback first (may be async for post-deploy validation)
+        // Catch to prevent unhandled promise rejection if the callback is async and throws
+        Promise.resolve(callbacks?.onComplete?.({ success, duration })).catch(() => {});
         this.emit("complete", { success, duration });
         resolve({ success, output, duration });
       });
 
       this.currentProcess.on("error", (err) => {
         this.currentProcess = null;
+        callbacks?.onError?.(err.message);
         this.emit("error", err.message);
         resolve({ success: false, output: output + "\n" + err.message });
       });
@@ -76,7 +94,7 @@ class BuildEngine extends EventEmitter {
    * Returns success flag and the last 100 lines of output (errors / warnings).
    */
   async runCompileCheck(onLine?: (line: string) => void): Promise<{ success: boolean; output: string }> {
-    if (this.currentProcess) {
+    if (this.currentProcess || this.compileProcess) {
       return { success: false, output: "A build is already in progress — try again after it finishes." };
     }
 
@@ -90,6 +108,7 @@ class BuildEngine extends EventEmitter {
       const settle = (success: boolean) => {
         if (settled) return;
         settled = true;
+        this.compileProcess = null;
         clearTimeout(timer);
         if (lineBuffer) onLine?.(lineBuffer);
         const trimmed = output.split("\n").slice(-120).join("\n");
@@ -109,6 +128,7 @@ class BuildEngine extends EventEmitter {
         ["compile", "-pl", "core", "--no-transfer-progress"],
         { cwd: config.aemProject.path, env: { ...process.env }, shell: true }
       );
+      this.compileProcess = proc;
 
       const timer = setTimeout(() => {
         proc.kill("SIGTERM");
@@ -128,6 +148,10 @@ class BuildEngine extends EventEmitter {
       this.currentProcess.kill("SIGTERM");
       this.currentProcess = null;
       this.emit("cancelled");
+    }
+    if (this.compileProcess) {
+      this.compileProcess.kill("SIGTERM");
+      this.compileProcess = null;
     }
   }
 }

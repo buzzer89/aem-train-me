@@ -60,7 +60,6 @@ export interface AppConfig {
   };
   aemInstance: {
     authorUrl: string;
-    publishUrl: string;
   };
   ai: {
     provider: string;

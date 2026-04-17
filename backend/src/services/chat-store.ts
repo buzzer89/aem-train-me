@@ -79,3 +79,9 @@ export function listSessions(): Array<{ id: string; title: string; created_at: s
     created_at: string;
   }>;
 }
+
+export function deleteSession(sessionId: string): boolean {
+  db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
+  const result = db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+  return result.changes > 0;
+}
