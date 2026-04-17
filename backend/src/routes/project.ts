@@ -67,9 +67,10 @@ router.post("/generate", (req: Request, res: Response) => {
     outputDir?: string;
   };
 
-  // Validate inputs — only alphanumeric, dots, hyphens, spaces allowed
+  // Validate inputs — only alphanumeric, dots, hyphens, spaces allowed.
+  // Reject single/double quotes and shell metacharacters to prevent injection.
   const safePattern = /^[\w.\- ]+$/;
-  if (!safePattern.test(appTitle) || !safePattern.test(appId) || !safePattern.test(groupId)) {
+  if (!safePattern.test(appTitle) || !safePattern.test(appId) || !safePattern.test(groupId) || !safePattern.test(archetypeVersion)) {
     res.status(400).json({ error: "Invalid characters in input fields" });
     return;
   }
@@ -135,12 +136,10 @@ router.post("/generate", (req: Request, res: Response) => {
   res.write(`data: ${JSON.stringify({ type: "output", text: `$ mvn ${args.join(" ")}\n` })}\n\n`);
   res.write(`data: ${JSON.stringify({ type: "output", text: `Working directory: ${baseDir}\n\n` })}\n\n`);
 
-  const spawnEnv = { ...process.env };
-
   const mvn = spawn(config.build.mavenCmd, args, {
     cwd: baseDir,
+    env: { ...process.env },
     shell: true,
-    env: spawnEnv,
   });
 
   let output = "";

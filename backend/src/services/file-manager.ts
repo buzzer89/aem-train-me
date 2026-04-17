@@ -31,23 +31,35 @@ const projectPath = () => config.aemProject.path;
  * Fix unescaped XML special characters inside attribute values of JCR DocView XML files.
  * The AI occasionally writes raw HTML (e.g. `<p>text</p>`) into attribute values which
  * causes FileVault to reject the file with a parse error.
+ *
+ * Only processes attribute values in XML tags (lines starting with `<` or containing
+ * XML attribute patterns) to avoid mangling CDATA or comments.
  */
 function sanitizeDocViewXml(content: string): string {
-  // Match every double-quoted attribute value and normalize its escaping.
-  // Strategy: fully unescape, then re-escape — handles both already-escaped and raw input.
-  return content.replace(/="([^"]*)"/g, (_match, val: string) => {
-    const unescaped = val
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&")
-      .replace(/&quot;/g, '"');
-    const reescaped = unescaped
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-    return `="${reescaped}"`;
-  });
+  // Process line-by-line; only touch lines that look like XML element/attribute content.
+  return content.split("\n").map((line) => {
+    const trimmed = line.trimStart();
+    // Skip comments, CDATA, processing instructions, and plain text lines
+    if (trimmed.startsWith("<!--") || trimmed.startsWith("<![CDATA[") || trimmed.startsWith("<?")) {
+      return line;
+    }
+    // Only process lines that contain XML attribute patterns (name="value")
+    if (!(/\w+="/.test(line))) return line;
+    // Match attribute values: word-chars followed by ="..."
+    return line.replace(/(\w+)="([^"]*)"/g, (_match, attr: string, val: string) => {
+      const unescaped = val
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"');
+      const reescaped = unescaped
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+      return `${attr}="${reescaped}"`;
+    });
+  }).join("\n");
 }
 
 function ensureWithinProject(filePath: string): string {
@@ -61,10 +73,29 @@ function ensureWithinProject(filePath: string): string {
 // ── Turn snapshot store ────────────────────────────────────────────────────
 // Keeps pre-write file snapshots per AI turn so changes can be undone.
 // Stored in memory only — cleared when the backend restarts.
+// Capped to the most recent MAX_SNAPSHOTS turns to avoid unbounded memory growth.
+const MAX_SNAPSHOTS = 50;
 const turnSnapshots = new Map<string, { path: string; previousContent: string | null }[]>();
+const turnOrder: string[] = [];
 
 export function startFileTurn(turnId: string): void {
   turnSnapshots.set(turnId, []);
+  turnOrder.push(turnId);
+  // Evict oldest snapshots when over the cap
+  while (turnOrder.length > MAX_SNAPSHOTS) {
+    const oldest = turnOrder.shift()!;
+    turnSnapshots.delete(oldest);
+  }
+}
+
+// ── File tree cache ───────────────────────────────────────────────────────
+// Invalidated on every file write so callers don't trigger a full recursive scan.
+let categorizedTreeCache: CategorizedTree | null = null;
+let flatFileListCache: string[] | null = null;
+
+function invalidateFileCache(): void {
+  categorizedTreeCache = null;
+  flatFileListCache = null;
 }
 
 export function writeProjectFile(relativePath: string, content: string, turnId?: string): void {
@@ -86,6 +117,7 @@ export function writeProjectFile(relativePath: string, content: string, turnId?:
 
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, finalContent, "utf-8");
+  invalidateFileCache();
 }
 
 export function undoTurn(turnId: string): string[] {
@@ -113,6 +145,9 @@ export function undoTurn(turnId: string): string[] {
   }
 
   turnSnapshots.delete(turnId);
+  const idx = turnOrder.indexOf(turnId);
+  if (idx !== -1) turnOrder.splice(idx, 1);
+  invalidateFileCache();
   return restored;
 }
 
@@ -161,6 +196,7 @@ export function getProjectTree(): FileNode[] {
 }
 
 export function getCategorizedTree(): CategorizedTree {
+  if (categorizedTreeCache) return categorizedTreeCache;
   const appsFolder = config.aemProject.appsFolder;
   const groupPath = config.aemProject.groupId.replaceAll(".", "/");
 
@@ -255,10 +291,12 @@ export function getCategorizedTree(): CategorizedTree {
     categories.frontend = buildTree(feDir, 0, 3);
   }
 
+  categorizedTreeCache = categories;
   return categories;
 }
 
 export function flatFileList(): string[] {
+  if (flatFileListCache) return flatFileListCache;
   const files: string[] = [];
   function walk(dir: string) {
     if (!fs.existsSync(dir)) return;
@@ -270,5 +308,6 @@ export function flatFileList(): string[] {
     }
   }
   walk(projectPath());
+  flatFileListCache = files;
   return files;
 }

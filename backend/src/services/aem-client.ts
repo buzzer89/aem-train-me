@@ -148,7 +148,15 @@ export async function healthCheck(): Promise<{
   try {
     const res = await aemFetch("/system/console/bundles.json");
     if (!res.ok) return { aemReachable: false, bundlesOk: false, status: "AEM unreachable" };
-    return { aemReachable: true, bundlesOk: true, status: "OK" };
+    const data = (await res.json()) as { data: BundleInfo[] };
+    const broken = data.data.filter(
+      (b) => b.state !== "Active" && b.state !== "Fragment"
+    );
+    const bundlesOk = broken.length === 0;
+    const status = bundlesOk
+      ? "OK"
+      : `${broken.length} bundle(s) not active: ${broken.slice(0, 3).map((b) => `${b.symbolicName} (${b.state})`).join(", ")}`;
+    return { aemReachable: true, bundlesOk, status };
   } catch {
     return { aemReachable: false, bundlesOk: false, status: "AEM unreachable" };
   }

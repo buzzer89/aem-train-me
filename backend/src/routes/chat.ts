@@ -1,15 +1,17 @@
 import { Router, Request, Response } from "express";
 import { runAgent } from "../services/ai-agent.js";
-import { createSession, addMessage, getHistory, listSessions } from "../services/chat-store.js";
+import { createSession, addMessage, getHistory, listSessions, deleteSession } from "../services/chat-store.js";
 
 const router = Router();
+
+const VALID_MODES = new Set(["trainer", "general"]);
 
 // POST /api/chat — streamed AI response via SSE
 router.post("/", (req: Request, res: Response) => {
   const { message, sessionId, mode = "trainer" } = req.body as {
     message: string;
     sessionId?: string;
-    mode?: "trainer" | "general";
+    mode?: string;
   };
 
   if (!message || typeof message !== "string") {
@@ -17,6 +19,7 @@ router.post("/", (req: Request, res: Response) => {
     return;
   }
 
+  const validMode = VALID_MODES.has(mode) ? (mode as "trainer" | "general") : "trainer";
   const sid = sessionId || createSession(message.slice(0, 60));
 
   // Save user message
@@ -61,7 +64,7 @@ router.post("/", (req: Request, res: Response) => {
       res.write(`data: ${JSON.stringify({ type: "error", error })}\n\n`);
       res.end();
     },
-  }, mode);
+  }, validMode);
 });
 
 // GET /api/chat/history?sessionId=...
@@ -79,6 +82,17 @@ router.get("/history", (req: Request, res: Response) => {
 router.get("/sessions", (_req: Request, res: Response) => {
   const sessions = listSessions();
   res.json(sessions);
+});
+
+// DELETE /api/chat/sessions/:id
+router.delete("/sessions/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!id) {
+    res.status(400).json({ error: "session id is required" });
+    return;
+  }
+  const deleted = deleteSession(id);
+  res.json({ deleted });
 });
 
 export default router;
